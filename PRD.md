@@ -1,58 +1,67 @@
-# Product Requirements Document (PRD) — Ginfor B2B Matching & Outreach Bot
+# Product Requirements Document (PRD) — Ginfor B2B Matching & Automated Outreach System
 
 ## 1. Giới thiệu & Mục tiêu (Introduction & Objectives)
-Hệ thống **Ginfor B2B Matching & Outreach Bot** là một nền tảng tự động kết nối nhu cầu giao dịch giữa các bên mua (buyer) và doanh nghiệp cung cấp (supplier) dựa trên dữ liệu mạng xã hội. 
+Dự án **Ginfor B2B Matching & Automated Outreach System** là giải pháp công nghệ toàn diện nhằm tự động hóa quy trình kết nối kinh doanh (B2B Matching) giữa người mua (buyer) và nhà cung cấp (supplier). Hệ thống tự động thu thập nhu cầu mua sắm công khai trên mạng xã hội, phân tích và đề xuất đối tác phù hợp nhất từ cơ sở dữ liệu doanh nghiệp có sẵn, đồng thời tự động soạn thảo tin nhắn tiếp cận thông qua các kênh tối ưu (Gmail, SMS, Facebook Comment).
 
-Mục tiêu chính:
-- **Tự động hóa phát hiện nhu cầu**: Quét và nhận diện các bài đăng có nhu cầu tìm nguồn cung cấp, đối tác hoặc sản phẩm trên các group Facebook B2B.
-- **Khớp nối thông minh (B2B Matching)**: Tìm ra Top 5 doanh nghiệp phù hợp nhất từ cơ sở dữ liệu hơn 9.600 doanh nghiệp của hệ thống bằng công nghệ xử lý ngôn ngữ tự nhiên (Vietnamese SBERT).
-- **Soạn thảo và tiếp cận tự động (Outreach)**: Trích xuất thông tin liên hệ của người mua để soạn thảo tin nhắn chào hàng chuyên nghiệp thông qua kênh tối ưu nhất (SMS, Gmail, hoặc Facebook Comment), giúp giới thiệu nhà cung cấp phù hợp nhất đến họ.
-
----
-
-## 2. Đối tượng người dùng (Target Audience)
-1. **Admin / Moderator (Người vận hành)**: Duyệt các tin nhắn tiếp cận khách hàng trên Discord trước khi hệ thống thực hiện gửi đi.
-2. **Bên có nhu cầu (Buyer)**: Các cá nhân/doanh nghiệp đăng bài tìm đối tác trên Facebook, được nhận danh sách doanh nghiệp gợi ý miễn phí qua SMS/Gmail/FB Comment.
-3. **Doanh nghiệp cung cấp (Supplier)**: Các công ty trong cơ sở dữ liệu của Ginfor được kết nối trực tiếp đến khách hàng có nhu cầu thực tế.
+### Mục tiêu chiến lược:
+- **Tối ưu hóa quy trình kết nối B2B**: Chuyển đổi phương thức tìm kiếm đối tác thủ công sang tự động hoàn toàn, rút ngắn thời gian từ vài ngày xuống còn vài phút.
+- **Tăng tỷ lệ chuyển đổi**: Gửi trực tiếp danh sách doanh nghiệp phù hợp kèm đầy đủ thông tin liên hệ ngay khi người mua phát sinh nhu cầu.
+- **Tiếp cận đa kênh (Omnichannel Outreach)**: Đảm bảo khả năng tiếp cận người mua thông qua mọi thông tin liên hệ thu thập được.
 
 ---
 
-## 3. Danh sách tính năng chính (Feature Requirements)
-
-### 3.1. Facebook Group Scraper (Thu thập dữ liệu)
-- Tự động quét danh sách các Facebook group B2B đã cấu hình định kỳ hoặc theo yêu cầu.
-- Sử dụng headless browser automation (Pyppeteer) để tải nội dung bài đăng động một cách an toàn.
-- Trích xuất thông tin: ID bài đăng, URL, nội dung văn bản.
-
-### 3.2. Lọc ý định mua hàng (Buyer Intent Filter)
-- Sử dụng mô hình học sâu **Vietnamese SBERT** để so khớp ngữ nghĩa bài viết với tập câu hỏi mẫu tìm nguồn cung cấp.
-- Bộ lọc từ khóa phủ định (`NEGATIVE_KEYWORDS`) để loại bỏ triệt để các bài đăng không mong muốn: bài chào hàng bán sỉ/lẻ, bài tuyển dụng nhân sự, spam, đa cấp.
-
-### 3.3. B2B Matching Engine (So khớp đối tác)
-- Thực hiện khớp nối qua 3 tầng (3-Funnel):
-  1. **Tầng 1 (Lexical Filter)**: Lọc thô bằng từ khóa ngành nghề để rút gọn danh sách ứng viên (từ 9.600+ xuống top 300).
-  2. **Tầng 2 (Location Filter)**: Nhận diện vị trí địa lý trong bài đăng (HCM, Hà Nội, Bình Dương...) để so khớp với khu vực hoạt động của doanh nghiệp.
-  3. **Tầng 3 (Semantic Scoring)**: Sử dụng SBERT tính cosine similarity để xếp hạng chi tiết mức độ phù hợp.
-- Trả về Top 5 doanh nghiệp có điểm matching cao nhất.
-
-### 3.4. Ginfor Outreach Engine (Soạn tin tiếp cận)
-- **Trích xuất thông tin**: Tự động nhận diện SĐT Việt Nam (di động/cố định) và email từ bài viết.
-- **Lựa chọn kênh ưu tiên**:
-  - Có SĐT $\rightarrow$ Ưu tiên kênh **SMS**.
-  - Không có SĐT, có Email $\rightarrow$ Ưu tiên kênh **Gmail**.
-  - Không có cả hai $\rightarrow$ Mặc định kênh **Facebook Comment**.
-- **Soạn tin chuyên nghiệp**: Tự động sinh nội dung tin nhắn tiếng Việt chuẩn mực B2B. Đính kèm trực tiếp thông tin liên hệ của Top 5 đối tác và giới thiệu truy cập `thongtincty.com` để tìm kiếm thêm.
-
-### 3.5. Discord UI Review (Giao diện phê duyệt)
-- Gửi tin nhắn Embed chi tiết mô tả thông tin bài đăng gốc, nhu cầu, kênh gửi và toàn bộ nội dung tin nhắn preview lên Discord.
-- Tích hợp 2 nút bấm tương tác: **Duyệt & Gửi (Approve)** và **Từ chối (Reject)** để quản trị viên quyết định trước khi gửi thật.
+## 2. Đối tượng sử dụng (Target Users)
+1. **Bên có nhu cầu (Buyer)**: Cá nhân hoặc tổ chức đăng tin tìm kiếm nguồn hàng, nhà gia công hoặc đối tác B2B trên mạng xã hội.
+2. **Nhà cung cấp (Supplier/Partner)**: Các doanh nghiệp Việt Nam nằm trong cơ sở dữ liệu của hệ thống, mong muốn nhận được cơ hội kinh doanh phù hợp.
+3. **Quản trị viên hệ thống (Admin/Moderator)**: Người kiểm duyệt các kết quả matching, chỉnh sửa nội dung tin nhắn chào hàng trước khi phê duyệt gửi đi qua giao diện Discord.
 
 ---
 
-## 4. Kế hoạch phát triển (Roadmap)
-- **Phase 1 (Hiện tại - Prototype)**: Đã hoàn thiện logic lõi, giao diện duyệt Discord và các bộ gửi tin mô phỏng (stubs).
-- **Phase 2 (Tích hợp thực tế)**:
-  - Tích hợp **Gmail API (OAuth2)** để gửi email tự động.
-  - Tích hợp **Twilio/Vonage API** để gửi SMS tự động.
-  - Tích hợp **Facebook Graph API** (yêu cầu Page Access Token + App Review) để tự động comment dưới bài viết.
-- **Phase 3 (Tự động hóa hoàn toàn)**: Cấu hình ngưỡng tin cậy để tự động gửi mà không cần qua bước duyệt thủ công đối với các bài viết có điểm matching cực cao.
+## 3. Phạm vi sản phẩm (Product Scope)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          HỆ THỐNG GINFOR B2B                            │
+├───────────────────┬──────────────────────┬──────────────────────────────┤
+│ 1. THU THẬP       │ 2. XỬ LÝ & KHỚP NỐI  │ 3. TIẾP CẬN & PHÊ DUYỆT      │
+│ - Facebook Scrap  │ - SBERT Intent Filter│ - Trích xuất SĐT/Email       │
+│ - Pyppeteer Auto  │ - 3-Tier Matching    │ - Đa kênh SMS/Email/Comment  │
+│ - Cookie-based    │ - Vector Database    │ - Discord Approve/Reject View│
+└───────────────────┴──────────────────────┴──────────────────────────────┘
+```
+
+### 3.1. Phân hệ 1: Thu thập thông tin tự động (Scraper Module)
+- **Tự động hóa trình duyệt**: Sử dụng Pyppeteer giả lập hành vi người dùng cuộn trang để vượt qua cơ chế tải động (lazy-loading) của Facebook.
+- **Quản lý danh sách nhóm**: Hỗ trợ cấu hình danh sách hàng chục group Facebook B2B mục tiêu khác nhau.
+- **Nhận diện & Lọc trùng**: Tự động bóc tách ID bài đăng và băm MD5 nội dung để loại bỏ các bài viết trùng lặp giữa các nhóm.
+
+### 3.2. Phân hệ 2: Lọc ý định & Thuật toán khớp nối (Matching Engine)
+- **Bộ lọc ý định mua hàng (SBERT Intent Filter)**: Chuyển đổi nội dung bài đăng thành không gian vector và so sánh độ tương đồng cosine với 41 mẫu nhu cầu chuẩn nhằm loại bỏ bài viết quảng cáo, tuyển dụng, spam.
+- **Phễu lọc doanh nghiệp 3 tầng (3-Tier Funnel)**:
+  - **Tầng 1 (Lexical Filter)**: So khớp từ khóa tần suất cao giữa nhu cầu và phân loại ngành nghề của doanh nghiệp để rút gọn tập dữ liệu lớn.
+  - **Tầng 2 (Location Filter)**: Trích xuất địa danh Việt Nam từ bài đăng và ưu tiên khớp nối doanh nghiệp cùng khu vực hoạt động.
+  - **Tầng 3 (Semantic Match)**: Dùng mô hình học sâu xếp hạng chính xác độ phù hợp dựa trên mô tả doanh nghiệp.
+
+### 3.3. Phân hệ 3: Tự động tiếp cận đa kênh (Outreach Engine)
+- **Trích xuất thông tin liên hệ**: Bóc tách số điện thoại di động, cố định và email trực tiếp từ bài đăng của người mua.
+- **Quy tắc chọn kênh tự động**:
+  - Ưu tiên 1: Gửi **SMS** nếu trích xuất được số điện thoại.
+  - Ưu tiên 2: Gửi **Gmail** nếu có email và không có số điện thoại.
+  - Mặc định: Gửi **Facebook Comment** phản hồi trực tiếp bài viết của người mua.
+- **Soạn tin chuyên nghiệp**: Tự động điền danh sách 5 đối tác phù hợp nhất trực tiếp vào tin nhắn kèm lời mời truy cập `thongtincty.com` để mở rộng kết nối.
+
+### 3.4. Phân hệ 4: Dashboard Quản trị & Điều khiển
+- **Discord Bot Interface**:
+  - Giao diện Admin để nhận thông báo thời gian thực về các match mới.
+  - Xem và phê duyệt (Approve/Reject) tin nhắn tiếp cận thông qua nút bấm tương tác.
+  - Các lệnh cấu hình nhanh: điều chỉnh ngưỡng lọc (`!match_threshold`), số lượng DN đề xuất (`!match_top`), trạng thái hệ thống (`!match_status`).
+- **FastAPI Web Dashboard**:
+  - Bản đồ dữ liệu các doanh nghiệp đang được lưu trữ.
+  - Giao diện web chạy thử và xem trực quan kết quả khớp nối doanh nghiệp.
+
+---
+
+## 5. Lộ trình phát triển & Yêu cầu tương lai (Roadmap)
+1. **Giai đoạn 1 (Hiện tại)**: Hoàn thành lõi matching thuật toán, công cụ trích xuất liên hệ đa kênh, giao diện tương duyệt trên Discord và mock senders.
+2. **Giai đoạn 2**: Tích hợp các cổng kết nối API thực tế bao gồm Google OAuth2 (Gmail), Twilio/Vonage (SMS) và Facebook Graph API (Comments).
+3. **Giai đoạn 3**: Nghiên cứu cải tiến hiệu năng matching lên dữ liệu 80.000 doanh nghiệp và tích hợp AI tạo sinh (LLM) để nâng cao chất lượng tóm tắt nhu cầu.

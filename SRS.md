@@ -1,99 +1,115 @@
-# Software Requirements Specification (SRS) — Ginfor B2B Matching & Outreach Bot
+# Software Requirements Specification (SRS) — Ginfor B2B Matching & Automated Outreach System
 
-## 1. Kiến trúc hệ thống (System Architecture)
-Hệ thống được thiết kế theo dạng hướng sự kiện (Event-driven) và xử lý tuần tự theo luồng (Pipeline).
+## 1. Kiến trúc hệ thống tổng thể (System Architecture)
+Hệ thống được thiết kế theo mô hình kiến trúc phân lớp kết hợp mô hình Pipeline hướng sự kiện.
 
 ```
-[ Facebook Groups ] 
-       │ (Headless Chrome / Pyppeteer)
-       ▼
-[ Scraper Module ] ──► Lọc Buyer Intent (SBERT + Neg Keywords)
-       │
-       ▼ (Nếu là Buyer)
-[ B2B Matching Engine ] (Funnel 3 tầng: Ngữ nghĩa + Từ khóa + Địa lý)
-       │
-       ▼ (Top 5 doanh nghiệp phù hợp)
-[ Ginfor Outreach Engine ] (Trích xuất SĐT/Email & Soạn tin nhắn)
-       │
-       ▼ (Gửi tin nhắn duyệt)
-[ Discord Review Channel ] (Embeds + Approve/Reject Buttons)
-       │
-  ┌────┴────────────┐
-  ▼ (Approve)       ▼ (Reject)
-[ Senders (Stubs) ]  [ Log & Cancel ]
-```
-
----
-
-## 2. Công nghệ sử dụng (Technology Stack)
-- **Ngôn ngữ lập trình**: Python 3.10+
-- **Thư viện AI**:
-  - `sentence-transformers` (Vietnamese SBERT model: `keepitreal/vietnamese-sbert` - chạy tăng tốc phần cứng thông qua thiết bị `mps` trên Mac Silicon).
-  - `scikit-learn` & `numpy` để tính toán khoảng cách vector.
-- **Thư viện Crawler**:
-  - `pyppeteer` (Headless Chrome Automation).
-  - `beautifulsoup4` (Phân tích cấu trúc HTML).
-- **Giao diện Chatbot**: `discord.py` phiên bản 2.x (hỗ trợ Discord UI Buttons & Views).
-- **Lưu trữ cấu hình**: `python-dotenv`.
-
----
-
-## 3. Cấu trúc dữ liệu chính (Data Structures)
-
-### 3.1. Company (Doanh nghiệp)
-```python
-{
-    "name": str,            # Tên công ty
-    "mst": str,             # Mã số thuế
-    "email": str,           # Địa chỉ email liên hệ
-    "phone": str,           # Số điện thoại
-    "main_industry": str,   # Ngành nghề chính
-    "sub_industry": str,    # Ngành nghề phụ
-    "address": str,         # Địa chỉ
-    "city": str,            # Tỉnh/Thành phố
-    "type": str,            # Loại hình doanh nghiệp
-    "description": str,     # Mô tả năng lực/sản phẩm
-}
-```
-
-### 3.2. OutreachAction (Hành động tiếp cận)
-```python
-class OutreachAction:
-    post_id: str
-    post_url: str
-    post_text: str
-    buyer_need_summary: str
-    channel: OutreachChannel   # SMS | GMAIL | FACEBOOK_COMMENT
-    recipient: str             # SĐT, Email hoặc URL bài đăng
-    message_content: str       # Nội dung chính
-    matches_used: list         # Danh sách 5 DN đã match
-    fb_comment_content: str    # Comment mặc định kèm theo
-    gmail_message: GmailMessage # Email chi tiết (nếu gửi bằng Gmail)
-    status: str                # pending_review | approved | rejected | sent
+                  ┌───────────────────────────────┐
+                  │      Facebook Group Data      │
+                  └──────────────┬────────────────┘
+                                 │ (Pyppeteer headlessly crawls)
+                                 ▼
+                  ┌───────────────────────────────┐
+                  │      Scraper Module (Bot)     │
+                  └──────────────┬────────────────┘
+                                 │ (Post ID & content hash dedup)
+                                 ▼
+                  ┌───────────────────────────────┐
+                  │  SBERT Intent Filter Module   │
+                  └──────────────┬────────────────┘
+                                 │ (Reject spam, sales, jobs)
+                                 ▼
+                  ┌───────────────────────────────┐
+                  │      B2B Matching Engine      │
+                  │   - Tier 1: Lexical Filter    │
+                  │   - Tier 2: Location Match    │
+                  │   - Tier 3: SBERT Cos Sim     │
+                  └──────────────┬────────────────┘
+                                 │ (Top 5 matched suppliers)
+                                 ▼
+                  ┌───────────────────────────────┐
+                  │   Ginfor Outreach Engine      │
+                  │   - Contact Extractor         │
+                  │   - Channel Router            │
+                  │   - Template Generator        │
+                  └──────────────┬────────────────┘
+                                 │
+         ┌───────────────────────┴────────────────────────┐
+         ▼ (Send preview)                                 ▼ (Expose APIs)
+┌─────────────────────────────────┐             ┌─────────────────────────────────┐
+│     Discord Admin Channel       │             │       FastAPI Web Admin         │
+│   (Approve/Reject UI Buttons)   │             │   - /api/match endpoint         │
+│                                 │             │   - Web Dashboard (UI)          │
+└────────────────┬────────────────┘             └─────────────────────────────────┘
+                 │
+      ┌──────────┴──────────┐
+      ▼ (Approve)           ▼ (Reject)
+┌───────────┴───────────┐ ┌─────┴─────┐
+│  Senders (SMS/Email)  │ │   Log &   │
+│  (Stub logs & stubs)  │ │  Discard  │
+└───────────────────────┘ └───────────┘
 ```
 
 ---
 
-## 4. Đặc tả thuật toán Matching (Matching Algorithm)
+## 2. Đặc tả kỹ thuật các phân hệ (Component Specifications)
 
-Điểm phù hợp tổng hợp (Total Score) được tính theo công thức:
-$$TotalScore = w_{semantic} \cdot S_{semantic} + w_{lexical} \cdot S_{lexical} + w_{location} \cdot S_{location}$$
+### 2.1. Phân hệ Scraper & Lọc trùng bài viết
+- **Thu thập dữ liệu**: Trình duyệt Chromium được điều khiển qua `pyppeteer`, nạp cookie `c_user` và `xs` của Facebook từ tệp môi trường để vượt qua trang đăng nhập.
+- **Phân tích nội dung**: Trích xuất mã ID bài viết gốc và nội dung dạng văn bản thô qua `BeautifulSoup4`.
+- **Bộ lọc trùng (Deduplication)**: 
+  - Lưu trữ 2000 bài viết gần nhất trong tệp JSON để so khớp ID bài viết.
+  - Sử dụng hàm băm MD5 cho 80 ký tự đầu tiên của bài đăng để lọc trùng các bài viết chia sẻ chéo (cross-posts) giữa các nhóm.
 
-Trong đó, cấu hình trọng số mặc định:
-- $w_{semantic} = 0.50$ (Điểm tương đồng vector ngữ nghĩa bằng SBERT)
-- $w_{lexical} = 0.30$ (Điểm trùng khớp từ khóa ngành nghề)
-- $w_{location} = 0.20$ (Điểm trùng khớp khu vực địa lý - $1.0$ nếu khớp hoặc không ghi rõ khu vực, $0.0$ nếu lệch khu vực)
+### 2.2. Bộ lọc ý định mua hàng (SBERT Intent Filter)
+- Nạp mô hình ngôn ngữ `keepitreal/vietnamese-sbert` vào bộ nhớ.
+- Tạo ma trận vector mẫu bằng cách mã hóa trước 41 câu truy vấn ý định mua hàng mẫu (`PARTNER_QUERIES`).
+- Khi phát hiện bài viết mới, tiến hành vector hóa và tính điểm tương đồng Cosine cực đại.
+- Nếu điểm tương đồng tối đa nhỏ hơn `SIMILARITY_THRESHOLD` (mặc định: `0.55`), bài đăng bị bỏ qua.
+- **Loại bỏ tin tuyển dụng & bán hàng**: Sử dụng mảng `NEGATIVE_KEYWORDS` để lọc phủ định nhanh (như: "tuyển dụng", "mô tả công việc", "tuyển sỉ", "giảm giá").
+
+### 2.3. Thuật toán so khớp đối tác (B2B Matching Engine)
+Khớp bài đăng với cơ sở dữ liệu `Business_dataset.csv` (gồm 9.630 doanh nghiệp) thông qua phễu lọc 3 tầng:
+1. **Tầng 1 - Lọc Lexical**: Tokenize từ ngữ của nhu cầu và so sánh tập từ khóa ngành nghề chính/phụ của doanh nghiệp. Chỉ giữ lại top 300 doanh nghiệp có số lượng từ khóa trùng khớp cao nhất.
+2. **Tầng 2 - Lọc Vị trí**: Sử dụng Regular Expression trích xuất các địa danh Việt Nam phổ biến trong bài đăng (HCM, Hà Nội, Bình Dương, v.v.). Doanh nghiệp cùng khu vực sẽ nhận điểm $S_{location} = 1.0$, ngược lại nhận $0.0$.
+3. **Tầng 3 - So khớp ngữ nghĩa**: Sử dụng SBERT mã hóa mô tả doanh nghiệp của top 300 ứng viên, so sánh cosine với vector bài viết để nhận điểm $S_{semantic}$.
+4. **Tính điểm tổng hợp**: 
+   $$TotalScore = 0.50 \cdot S_{semantic} + 0.30 \cdot S_{lexical} + 0.20 \cdot S_{location}$$
+
+### 2.4. Phân hệ Outreach & Senders
+- **Trích xuất thông tin liên lạc**:
+  - Số điện thoại: Regex `(?:\+84|0)(?:[\s.\-]?\d){9,10}` trích xuất các SĐT 10-11 chữ số, tự động chuyển đầu số `+84` về `0` và loại bỏ các chuỗi trùng với MST.
+  - Email: Regex lọc chuẩn định dạng hòm thư điện tử toàn cầu.
+- **Quy tắc Router**: Kênh gửi SMS được chọn nếu có SĐT, Gmail nếu có Email (và không có SĐT), FB Comment làm mặc định.
+- **Biến đổi định dạng**:
+  - SMS: Tự động loại bỏ dấu tiếng Việt (UTF-8 sang ASCII) để giảm dung lượng ký tự xuống dưới giới hạn 160 ký tự tiêu chuẩn.
+  - Gmail: Soạn thảo mã HTML hiển thị bảng biểu chi tiết (Tên doanh nghiệp, MST, Ngành nghề, Địa chỉ, Liên hệ, Điểm phù hợp).
+
+### 2.5. Giao diện phê duyệt Discord UI
+- Sử dụng API `discord.Embed` định dạng các trường thông tin có cấu trúc.
+- Tạo lớp `OutreachReviewView` kế thừa từ `discord.ui.View` chứa hai nút bấm tương tác:
+  - Nút **Approve**: Đổi trạng thái `OutreachAction` thành `approved`, kích hoạt lớp gửi tin `BaseSender` tương ứng và cập nhật giao diện nút bấm thành Disabled.
+  - Nút **Reject**: Hủy hành động gửi tin, cập nhật trạng thái `rejected`.
+
+### 2.6. Trang quản trị Web (FastAPI)
+- Khởi chạy Web Server bằng `uvicorn` trên cổng cấu hình `8000`.
+- Endpoint `POST /api/match` nhận JSON yêu cầu matching thủ công, trả về danh sách đối tác phù hợp có cấu trúc.
+- Endpoint `GET /` tải giao diện Dashboard xây dựng từ file `templates/index.html`.
 
 ---
 
-## 5. Đặc tả mô-đun gửi tin nhắn (Outreach Senders)
-Các bộ gửi tin trong giai đoạn prototype sử dụng các stubs:
-- **`SMSSender`**: Loại bỏ dấu tiếng Việt (chuyển đổi ký tự UTF-8 về ASCII), kiểm tra độ dài tin nhắn và ghi nhận log console dạng `📱 [SMS STUB]`.
-- **`GmailSender`**: Soạn thảo email dạng HTML đẹp có chứa bảng thông tin chi tiết của 5 đối tác và gửi qua email tạm thời `lenhatminh24122004@gmail.com`. Ghi log dạng `📧 [GMAIL STUB]`.
-- **`FacebookCommentSender`**: Soạn comment quảng bá thương hiệu Ginfor và thongtincty.com, ghi log dạng `💬 [FB COMMENT STUB]`.
+## 3. Đặc tả cơ sở dữ liệu & Tệp cấu hình (Data & Storage)
+- **Cơ sở dữ liệu doanh nghiệp**: File `Business_dataset.csv` chứa thông tin chi tiết của 9.630 doanh nghiệp.
+- **Pickle Vector Index**: Tệp `Business_dataset.csv.embeddings.pkl` lưu trữ các vector nhúng (embeddings) được sinh ra từ SBERT để tránh mã hóa lại trên mỗi lần khởi động bot.
+- **Tệp cấu hình**: `.env.bot.facebook` lưu trữ các khóa bí mật:
+  - `DISCORD_TOKEN`: Token kết nối bot Discord.
+  - `DISCORD_CHANNEL_ID`: Kênh nhận log kết quả matching.
+  - `OUTREACH_REVIEW_CHANNEL_ID`: Kênh duyệt tin nhắn tiếp cận của Admin.
+  - `FB_COOKIE_C_USER`, `FB_COOKIE_XS`: Cookies định danh đăng nhập Facebook.
 
 ---
 
-## 6. Yêu cầu phi chức năng (Non-Functional Requirements)
-- **Bảo mật**: Các khóa bí mật (`DISCORD_TOKEN`, `FB_COOKIE_C_USER`, `FB_COOKIE_XS`) tuyệt đối không được đưa lên Git repo công khai. Phải lưu trữ trong `.env.bot.facebook` nằm trong danh mục `.gitignore`.
-- **Tốc độ xử lý**: Quá trình khớp nối dữ liệu với 9.600+ doanh nghiệp phải hoàn thành dưới **10 giây** nhờ việc lưu cache embeddings dạng pickle (`Business_dataset.csv.embeddings.pkl`).
+## 4. Yêu cầu phi chức năng (Non-functional Requirements)
+- **Tương thích phần cứng**: Hỗ trợ tăng tốc tính toán Tensor thông qua Apple Silicon GPU (`mps` device trong PyTorch).
+- **Thời gian phản hồi**: Thời gian khớp nối dữ liệu và trích xuất tin nhắn chào hàng không được vượt quá 10 giây đối với tập dữ liệu 10.000 doanh nghiệp.
+- **Bảo mật dữ liệu**: Các tệp chứa mã khóa bí mật, cookie định danh và dữ liệu thu thập thực tế phải được liệt kê đầy đủ trong tệp `.gitignore` để tránh rò rỉ lên các kho lưu trữ công cộng.
