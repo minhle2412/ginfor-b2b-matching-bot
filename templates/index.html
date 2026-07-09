@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThongtinCty — B2B Matching Tuning Engine Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: rgba(22, 27, 34, 0.85);
+            --border-color: rgba(48, 54, 61, 0.8);
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #f0883e;
+            --accent-purple: #bc8cff;
+            --card-hover: rgba(56, 139, 253, 0.1);
+            --transition-speed: 0.25s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(31, 111, 235, 0.15) 0px, transparent 50%),
+                radial-gradient(at 50% 0%, rgba(188, 140, 255, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(63, 185, 80, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        /* Header Style */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-section svg {
+            width: 40px;
+            height: 40px;
+            fill: var(--accent-blue);
+            filter: drop-shadow(0 0 8px rgba(88, 166, 255, 0.5));
+        }
+
+        .logo-text h1 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #58a6ff, #bc8cff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text span {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .version-badge {
+            background-color: rgba(88, 166, 255, 0.15);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            color: var(--accent-blue);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Dashboard Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 450px 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Card Styles */
+        .glass-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-left: 4px solid var(--accent-blue);
+            padding-left: 10px;
+        }
+
+        /* Form elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            height: 140px;
+            background: rgba(13, 17, 23, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color var(--transition-speed);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        /* Slider Controls */
+        .slider-container {
+            background: rgba(13, 17, 23, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .slider-title {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .slider-val {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .range-slider {
+            width: 100%;
+            height: 6px;
+            background: #21262d;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(88, 166, 255, 0.8);
+            transition: transform 0.1s;
+        }
+
+        .range-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Presets buttons */
+        .presets-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn-preset {
+            background: rgba(33, 38, 45, 0.8);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: left;
+            transition: all var(--transition-speed);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn-preset:hover {
+            border-color: var(--accent-blue);
+            color: var(--text-primary);
+            background: rgba(56, 139, 253, 0.05);
+        }
+
+        /* Match button */
+        .btn-match {
+            width: 100%;
+            background: linear-gradient(90deg, #1f6feb, #6f42c1);
+            color: var(--white);
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(31, 111, 235, 0.35);
+            transition: all var(--transition-speed);
+        }
+
+        .btn-match:hover {
+            opacity: 0.95;
+            box-shadow: 0 4px 20px rgba(31, 111, 235, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-match:active {
+            transform: translateY(1px);
+        }
+
+        /* Results Panel */
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .match-count {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .company-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .company-card {
+            background: rgba(22, 27, 34, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all var(--transition-speed);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .company-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 4px;
+            background: var(--accent-blue);
+        }
+
+        .company-card:hover {
+            transform: translateX(4px);
+            border-color: rgba(88, 166, 255, 0.4);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            background: rgba(30, 41, 59, 0.3);
+        }
+
+        .company-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .company-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .score-badge {
+            background: rgba(31, 111, 235, 0.15);
+            border: 1px solid rgba(31, 111, 235, 0.3);
+            color: var(--accent-blue);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .score-badge.high {
+            background: rgba(63, 185, 80, 0.15);
+            border-color: rgba(63, 185, 80, 0.3);
+            color: var(--accent-green);
+        }
+
+        .score-badge.medium {
+            background: rgba(240, 136, 62, 0.15);
+            border-color: rgba(240, 136, 62, 0.3);
+            color: var(--accent-orange);
+        }
+
+        .company-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .meta-item svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--text-secondary);
+        }
+
+        .company-desc {
+            font-size: 14px;
+            color: rgba(240, 246, 252, 0.85);
+            line-height: 1.5;
+            background: rgba(13, 17, 23, 0.4);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(48, 54, 61, 0.3);
+            margin-bottom: 15px;
+        }
+
+        /* Score breakdown bars */
+        .breakdown-section {
+            background: rgba(13, 17, 23, 0.5);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .breakdown-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .bar-container {
+            width: 120px;
+            height: 6px;
+            background: #21262d;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-left: 10px;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--accent-blue);
+            border-radius: 3px;
+        }
+
+        .breakdown-info {
+            display: flex;
+            align-items: center;
+        }
+
+        /* Action Buttons */
+        .card-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-action {
+            background: rgba(33, 38, 45, 0.8);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all var(--transition-speed);
+        }
+
+        .btn-action:hover {
+            border-color: var(--accent-blue);
+            background: rgba(56, 139, 253, 0.05);
+        }
+
+        .btn-action.approve:hover {
+            border-color: var(--accent-green);
+            background: rgba(63, 185, 80, 0.05);
+            color: var(--accent-green);
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 20px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            fill: rgba(139, 148, 158, 0.2);
+            margin-bottom: 16px;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(88, 166, 255, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border-left-color: var(--accent-blue);
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-section">
+                <!-- SVG Icon representing network/connection -->
+                <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="3"/>
+                    <circle cx="5" cy="19" r="3"/>
+                    <circle cx="19" cy="19" r="3"/>
+                    <path d="M12 8l-5 8M12 8l5 8M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <div class="logo-text">
+                    <h1>ThongtinCty B2B Matching</h1>
+                    <span>ALGORITHM TUNING DASHBOARD</span>
+                </div>
+            </div>
+            <div class="version-badge">v1.0.0-PROTOTYPE</div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Left Panel: Controls -->
+            <div class="glass-panel">
+                <h2>Cấu Hình Thuật Toán</h2>
+                
+                <div class="form-group">
+                    <label>Nhu Cầu của Buyer (Facebook Post)</label>
+                    <textarea id="query-input" placeholder="Nhập bài viết Facebook hoặc nhu cầu B2B cần tìm kiếm đối tác..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Chọn Nhanh Bài Viết Mẫu</label>
+                    <div class="presets-grid">
+                        <button class="btn-preset" onclick="loadPreset(1)">💊 1. Sản xuất thuốc thú y</button>
+                        <button class="btn-preset" onclick="loadPreset(2)">🌸 2. Sỉ hoa tươi Đà Lạt</button>
+                        <button class="btn-preset" onclick="loadPreset(3)">🏢 3. Thi công nội thất văn phòng</button>
+                        <button class="btn-preset" onclick="loadPreset(4)">🤖 4. Phát triển chatbot AI B2B</button>
+                    </div>
+                </div>
+
+                <!-- Weight Sliders -->
+                <div class="form-group">
+                    <label>Phân Bổ Trọng Số (Tổng = 1.0)</label>
+                    
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span class="slider-title">🧠 SBERT Semantic ($w_{semantic}$)</span>
+                            <span class="slider-val" id="w-sem-val">0.50</span>
+                        </div>
+                        <input type="range" class="range-slider" id="w-sem" min="0" max="1" step="0.05" value="0.50" oninput="balanceSliders('sem')">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span class="slider-title">🏷️ Lexical Keyword Match ($w_{lexical}$)</span>
+                            <span class="slider-val" id="w-lex-val">0.30</span>
+                        </div>
+                        <input type="range" class="range-slider" id="w-lex" min="0" max="1" step="0.05" value="0.30" oninput="balanceSliders('lex')">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span class="slider-title">📍 Vị Trí Địa Lý ($w_{location}$)</span>
+                            <span class="slider-val" id="w-loc-val">0.20</span>
+                        </div>
+                        <input type="range" class="range-slider" id="w-loc" min="0" max="1" step="0.05" value="0.20" oninput="balanceSliders('loc')">
+                    </div>
+                </div>
+
+                <!-- Threshold Slider -->
+                <div class="form-group">
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span class="slider-title">📊 Ngưỡng Điểm Tối Thiểu (Threshold)</span>
+                            <span class="slider-val" id="threshold-val">0.30</span>
+                        </div>
+                        <input type="range" class="range-slider" id="threshold" min="0.1" max="0.9" step="0.05" value="0.30" oninput="document.getElementById('threshold-val').innerText = parseFloat(this.value).toFixed(2)">
+                    </div>
+                </div>
+
+                <button class="btn-match" onclick="performMatching()">
+                    <svg style="width: 20px; height: 20px; fill: white;" viewBox="0 0 24 24">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    Tìm Doanh Nghiệp Phù Hợp
+                </button>
+            </div>
+
+            <!-- Right Panel: Results -->
+            <div class="glass-panel">
+                <div class="results-header">
+                    <h2>Danh Sách Doanh Nghiệp Khớp</h2>
+                    <span class="match-count" id="match-count">Nhập nhu cầu và nhấn nút để bắt đầu...</span>
+                </div>
+
+                <div id="results-container">
+                    <!-- Default Empty State -->
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        <p>Chưa có dữ liệu tìm kiếm. Hãy chọn nhanh một bài viết mẫu và click "Tìm Doanh Nghiệp Phù Hợp".</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PRESETS = {
+            1: "Cần tìm nguồn cung cấp thuốc thú y thủy sản, dược phẩm thú y chất lượng cao, có đầy đủ giấy phép lưu hành sản phẩm. Yêu cầu xưởng lớn có khả năng sản xuất số lượng lớn, chiết khấu sỉ tốt để phân phối cho thị trường miền Tây sông nước. Mình ở TP HCM cần nhập gấp đợt hàng này.",
+            2: "Mình đang tìm nhà cung ứng hoa tươi Đà Lạt giá tận gốc xưởng của Dalat Hasfarm hoặc tương đương. Cần sỉ các loại hoa cúc, hoa hồng, ngọn cây giống chất lượng cao. Shop hoa của mình nằm ở Quận 3, TP. Hồ Chí Minh, mong muốn tìm đối tác có xe lạnh vận chuyển nhanh trong ngày.",
+            3: "Công ty của mình chuẩn bị mở rộng chi nhánh mới tại Quận Phú Nhuận, HCM. Cần tìm đơn vị thiết kế thi công xây dựng kiến trúc và trang trí nội thất văn phòng trọn gói. Yêu cầu công ty thầu uy tín, có đội ngũ kiến trúc sư kinh nghiệm, làm trọn gói từ tư vấn thiết kế vẽ bản vẽ kỹ thuật đến thi công hoàn thiện bàn giao.",
+            4: "Mình cần tìm công ty công nghệ outsource phát triển hệ thống AI chatbot tích hợp phần mềm quản lý doanh nghiệp giúp chăm sóc khách hàng tự động cho platform B2B. Ưu tiên các agency hoặc startup chuyên sâu về phần mềm AI, Big Data tại Việt Nam."
+        };
+
+        function loadPreset(id) {
+            document.getElementById("query-input").value = PRESETS[id];
+        }
+
+        // Automatic Weight Slider Balancer so they always sum up to 1.0
+        function balanceSliders(changed) {
+            const semSlider = document.getElementById("w-sem");
+            const lexSlider = document.getElementById("w-lex");
+            const locSlider = document.getElementById("w-loc");
+
+            let sem = parseFloat(semSlider.value);
+            let lex = parseFloat(lexSlider.value);
+            let loc = parseFloat(locSlider.value);
+
+            if (changed === 'sem') {
+                const remainder = 1.0 - sem;
+                const totalOthers = lex + loc;
+                if (totalOthers > 0) {
+                    lexSlider.value = (lex / totalOthers) * remainder;
+                    locSlider.value = (loc / totalOthers) * remainder;
+                } else {
+                    lexSlider.value = remainder / 2;
+                    locSlider.value = remainder / 2;
+                }
+            } else if (changed === 'lex') {
+                const remainder = 1.0 - lex;
+                const totalOthers = sem + loc;
+                if (totalOthers > 0) {
+                    semSlider.value = (sem / totalOthers) * remainder;
+                    locSlider.value = (loc / totalOthers) * remainder;
+                } else {
+                    semSlider.value = remainder / 2;
+                    locSlider.value = remainder / 2;
+                }
+            } else if (changed === 'loc') {
+                const remainder = 1.0 - loc;
+                const totalOthers = sem + lex;
+                if (totalOthers > 0) {
+                    semSlider.value = (sem / totalOthers) * remainder;
+                    lexSlider.value = (lex / totalOthers) * remainder;
+                } else {
+                    semSlider.value = remainder / 2;
+                    lexSlider.value = remainder / 2;
+                }
+            }
+
+            // Update UI displays
+            document.getElementById("w-sem-val").innerText = parseFloat(semSlider.value).toFixed(2);
+            document.getElementById("w-lex-val").innerText = parseFloat(lexSlider.value).toFixed(2);
+            document.getElementById("w-loc-val").innerText = parseFloat(locSlider.value).toFixed(2);
+        }
+
+        async function performMatching() {
+            const query = document.getElementById("query-input").value.trim();
+            if (!query) {
+                alert("Vui lòng nhập nội dung nhu cầu buyer!");
+                return;
+            }
+
+            const w_sem = parseFloat(document.getElementById("w-sem").value);
+            const w_lex = parseFloat(document.getElementById("w-lex").value);
+            const w_loc = parseFloat(document.getElementById("w-loc").value);
+            const threshold = parseFloat(document.getElementById("threshold").value);
+
+            const container = document.getElementById("results-container");
+            const countLabel = document.getElementById("match-count");
+
+            // Show loading state
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="loading-spinner"></div>
+                    <p>Đang xử lý thuật toán Matching lai (Semantic SBERT + Lexical)...</p>
+                </div>
+            `;
+            countLabel.innerText = "Đang chạy matching...";
+
+            try {
+                const response = await fetch("/api/match", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        w_semantic: w_sem,
+                        w_lexical: w_lex,
+                        w_location: w_loc,
+                        min_score: threshold
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Lỗi gọi API từ server.");
+                }
+
+                const data = await response.json();
+                countLabel.innerText = `Tìm thấy ${data.length} doanh nghiệp phù hợp`;
+
+                if (data.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                            </svg>
+                            <p>Không tìm thấy doanh nghiệp nào có độ tương đồng lớn hơn ngưỡng ${threshold.toFixed(2)}.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = "";
+                data.forEach(item => {
+                    const comp = item.company;
+                    const b = item.score_breakdown;
+                    const pctScore = Math.round(item.total_score * 100);
+                    
+                    let badgeClass = "";
+                    if (item.total_score >= 0.75) badgeClass = "high";
+                    else if (item.total_score >= 0.50) badgeClass = "medium";
+
+                    const card = document.createElement("div");
+                    card.className = "company-card";
+                    card.innerHTML = `
+                        <div class="company-header">
+                            <div class="company-name">${comp.name}</div>
+                            <div class="score-badge ${badgeClass}">
+                                🎯 ${pctScore}%
+                            </div>
+                        </div>
+                        <div class="company-meta">
+                            <div class="meta-item">
+                                🔑 MST: ${comp.mst}
+                            </div>
+                            <div class="meta-item">
+                                📍 ${comp.city}
+                            </div>
+                            <div class="meta-item">
+                                🏢 ${comp.type}
+                            </div>
+                            <div class="meta-item">
+                                📞 ${comp.phone || 'Chưa cập nhật'}
+                            </div>
+                        </div>
+                        <div class="company-desc">
+                            ${comp.description}
+                        </div>
+                        <div class="breakdown-section">
+                            <div class="breakdown-row">
+                                <div class="breakdown-info">
+                                    <span>🧠 Semantic Similarity (SBERT):</span>
+                                    <span class="bar-container">
+                                        <div class="bar-fill" style="width: ${b.semantic * 100}%; background-color: var(--accent-purple);"></div>
+                                    </span>
+                                </div>
+                                <span style="font-family: 'JetBrains Mono';">${Math.round(b.semantic * 100)}%</span>
+                            </div>
+                            <div class="breakdown-row">
+                                <div class="breakdown-info">
+                                    <span>🏷️ Lexical Keyword Match:</span>
+                                    <span class="bar-container">
+                                        <div class="bar-fill" style="width: ${b.lexical * 100}%; background-color: var(--accent-blue);"></div>
+                                    </span>
+                                </div>
+                                <span style="font-family: 'JetBrains Mono';">${Math.round(b.lexical * 100)}%</span>
+                            </div>
+                            <div class="breakdown-row">
+                                <div class="breakdown-info">
+                                    <span>📍 Location Match:</span>
+                                    <span class="bar-container">
+                                        <div class="bar-fill" style="width: ${b.location * 100}%; background-color: var(--accent-green);"></div>
+                                    </span>
+                                </div>
+                                <span style="font-family: 'JetBrains Mono';">${Math.round(b.location * 100)}%</span>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-action approve" onclick="alert('Đã phê duyệt doanh nghiệp này! Tín hiệu gửi về Web/Discord.')">
+                                ✓ Phê Duyệt Match
+                            </button>
+                            <button class="btn-action" onclick="alert('MST: ${comp.mst}\\nEmail: ${comp.email}\\nĐịa chỉ: ${comp.address}')">
+                                ✉ Liên Hệ
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+
+            } catch (err) {
+                container.innerHTML = `
+                    <div class="empty-state" style="color: var(--accent-orange);">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                        </svg>
+                        <p>Lỗi kết nối tới server. Vui lòng đảm bảo server uvicorn đang chạy trên port 8000!</p>
+                        <p style="font-size:12px; margin-top: 8px;">${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

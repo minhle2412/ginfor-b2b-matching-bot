@@ -1,0 +1,52 @@
+# ============================================
+# 🔒 BẢO MẬT - KHÔNG ĐƯỢC COMMIT CÁC FILE NÀY
+# ============================================
+
+# File cấu hình chứa credentials thực tế
+.env
+.env.bot.facebook
+.env.bot.instagram
+ig_session.json
+
+# ============================================
+# 📁 DỮ LIỆU VÀ CACHE
+# ============================================
+
+# Dữ liệu đã scrape hoặc database dedup
+downloaded_posts.json
+fb_scraped_posts.json
+fb_matching_posts.json
+downloads/
+
+# Log files (có thể rất lớn)
+*.log
+
+# Cache embeddings lớn (29MB, tự sinh khi chạy lần đầu)
+Business_dataset.csv.embeddings.pkl
+
+# ============================================
+# 🐍 PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.ruff_cache/
+
+# ============================================
+# 💻 HỆ THỐNG
+# ============================================
+.DS_Store
+.DS_Store?
+Thumbs.db
+*.swp
+*.swo
+
+# ============================================
+# 🤖 AI / AGENT CONFIG
+# ============================================
+.agents/
