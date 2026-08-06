@@ -41,6 +41,9 @@ b2b_harvester/*_thongtincty.json
 b2b_harvester/*_thongtincty.csv
 b2b_harvester/leader_summary_report.*
 
+# Dataset mẫu 9.630 dòng - dữ liệu chính thức nay lấy từ Supabase
+Business_dataset.csv
+
 # Dataset mẫu (9.630 dòng) - đã chuyển sang Supabase
 Business_dataset.csv
 example_data.csv
