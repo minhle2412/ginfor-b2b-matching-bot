@@ -24,6 +24,27 @@ downloads/
 # Cache embeddings lớn (29MB, tự sinh khi chạy lần đầu)
 Business_dataset.csv.embeddings.pkl
 
+# Cache của lớp datasource: embeddings + snapshot offline dữ liệu Supabase
+# Cache bản dịch Anh→Việt (translation/)
+.cache/
+
+# ============================================
+# 💾 DATABASE & DỮ LIỆU ĐÃ SCRAPE (674MB, tự sinh lại được)
+# GitHub chặn file > 100MB nên bắt buộc loại, nếu không push sẽ hỏng
+# ============================================
+# SQLite của harvester - chứa 9.630 supplier + embeddings
+*.db
+b2b_harvester/b2b_harvester.db
+
+# Dữ liệu export kèm vector embeddings (file 150-200MB, vượt giới hạn GitHub)
+b2b_harvester/*_thongtincty.json
+b2b_harvester/*_thongtincty.csv
+b2b_harvester/leader_summary_report.*
+
+# Dataset mẫu (9.630 dòng) - đã chuyển sang Supabase
+Business_dataset.csv
+example_data.csv
+
 # ============================================
 # 🐍 PYTHON
 # ============================================

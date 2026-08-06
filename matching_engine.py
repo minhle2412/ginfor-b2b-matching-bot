@@ -1,125 +1,135 @@
 import os
-import csv
 import re
-import numpy as np
 import logging
-from sentence_transformers import SentenceTransformer, util
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class B2BMatchingEngine:
-    def __init__(self, csv_path, model_name='keepitreal/vietnamese-sbert'):
-        self.csv_path = csv_path
+    """
+    Matching Engine ghép nhu cầu buyer với doanh nghiệp supplier.
+
+    Nguồn dữ liệu supplier được tiêm vào qua `source` (xem package `datasource`),
+    nên engine không phụ thuộc việc dữ liệu nằm ở Supabase hay file CSV.
+
+        from datasource import get_supplier_source
+        engine = B2BMatchingEngine(source=get_supplier_source())
+
+    Vẫn tương thích ngược với cách gọi cũ:
+
+        engine = B2BMatchingEngine(csv_path="Business_dataset.csv")
+    """
+
+    def __init__(self, csv_path=None, model_name='keepitreal/vietnamese-sbert', source=None):
+        if source is None:
+            if csv_path:
+                from datasource import CsvSupplierSource
+                source = CsvSupplierSource(csv_path)
+            else:
+                from datasource import get_supplier_source
+                source = get_supplier_source()
+
+        self.source = source
+        self.csv_path = csv_path            # giữ lại cho code cũ tham chiếu
         self.model_name = model_name
         self.model = None
         self.companies = []
         self.company_embeddings = None
-        
+
+    # ------------------------------------------------------------------
+    # DATA
+    # ------------------------------------------------------------------
     def load_data(self):
-        """Loads company data from CSV file."""
-        logger.info(f"Loading data from {self.csv_path}...")
-        if not os.path.exists(self.csv_path):
-            raise FileNotFoundError(f"CSV file not found at {self.csv_path}")
-            
-        companies = []
-        with open(self.csv_path, mode='r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                companies.append({
-                    "name": row.get("Ten cong ty", "").strip(),
-                    "mst": row.get("MST", "").strip(),
-                    "email": row.get("Email", "").strip(),
-                    "phone": row.get("SDT", "").strip(),
-                    "main_industry": row.get("Nganh chinh", "").strip(),
-                    "sub_industry": row.get("Nganh phu", "").strip(),
-                    "address": row.get("Dia chi", "").strip(),
-                    "city": row.get("Tinh/Thanh", "").strip(),
-                    "type": row.get("Loai hinh", "").strip(),
-                    "description": row.get("Mo ta", "").strip(),
-                    "industry_group": row.get("Nhom nganh", "").strip(),
-                    "classification": row.get("Nhóm phân loại", "").strip(),
-                })
-        self.companies = companies
+        """Tải danh sách doanh nghiệp từ nguồn đã cấu hình."""
+        logger.info(f"Loading suppliers from {self.source.describe()}...")
+        self.companies = self.source.load()
         logger.info(f"Loaded {len(self.companies)} companies successfully.")
-        
+
+    def reload_data(self, rebuild_index=True):
+        """
+        Tải lại dữ liệu từ nguồn (dùng khi Supabase có DN mới).
+        Embeddings chỉ được build lại nếu nội dung dữ liệu thực sự thay đổi.
+        """
+        self.companies = self.source.load(force_refresh=True)
+        logger.info(f"🔄 Đã tải lại {len(self.companies)} doanh nghiệp từ {self.source.describe()}")
+        if rebuild_index:
+            self.company_embeddings = None
+            self.build_index()
+
     def load_model(self):
         """Loads SentenceTransformer model."""
         if self.model is None:
+            from sentence_transformers import SentenceTransformer
             logger.info(f"Loading SBERT model '{self.model_name}'...")
             self.model = SentenceTransformer(self.model_name)
             logger.info("Model loaded successfully.")
-            
-    def _get_csv_hash(self):
-        """Generates MD5 hash of the CSV file to validate cache integrity."""
-        import hashlib
-        if not os.path.exists(self.csv_path):
-            return ""
-        hasher = hashlib.md5()
-        with open(self.csv_path, 'rb') as f:
-            buf = f.read(65536)
-            while len(buf) > 0:
-                hasher.update(buf)
-                buf = f.read(65536)
-        return hasher.hexdigest()
+
+    def _embed_text_for(self, company):
+        """Ghép các trường của DN thành đoạn văn bản đưa vào SBERT."""
+        return f"{company['name']} - Ngành: {company['main_industry']} - Mô tả: {company['description']}"
 
     def build_index(self):
         """Encodes company metadata for semantic search (with automatic local caching)."""
         import pickle
-        
-        cache_path = self.csv_path + ".embeddings.pkl"
-        current_hash = self._get_csv_hash()
-        
+
+        if not self.companies:
+            self.load_data()
+
+        cache_path = self.source.cache_path()
+        current_hash = self.source.content_hash()
+
         # Check if valid cache exists
         if os.path.exists(cache_path):
             try:
                 logger.info(f"Loading cached embeddings from {cache_path}...")
                 with open(cache_path, 'rb') as f:
                     cache_data = pickle.load(f)
-                
-                # Verify that cache corresponds to the current CSV file state and company count
-                if cache_data.get("csv_hash") == current_hash and len(cache_data.get("embeddings", [])) == len(self.companies):
+
+                # Verify that cache corresponds to current data state and company count
+                cached_hash = cache_data.get("content_hash") or cache_data.get("csv_hash")
+                if cached_hash == current_hash and len(cache_data.get("embeddings", [])) == len(self.companies):
                     self.company_embeddings = cache_data["embeddings"]
                     logger.info("✅ Cached embeddings loaded successfully! Startup is instantaneous.")
                     return
                 else:
-                    logger.info("⚠️ CSV file has changed or cache is mismatching. Rebuilding embeddings...")
+                    logger.info("⚠️ Dữ liệu nguồn đã thay đổi hoặc cache không khớp. Đang build lại embeddings...")
             except Exception as e:
                 logger.warning(f"⚠️ Error loading cache: {e}. Rebuilding embeddings...")
 
         # Re-build if cache is missing or stale
         self.load_model()
-        
-        texts_to_embed = []
-        for c in self.companies:
-            # Combine name, main industry, and description for a richer semantic representation
-            text = f"{c['name']} - Ngành: {c['main_industry']} - Mô tả: {c['description']}"
-            texts_to_embed.append(text)
-            
+
+        texts_to_embed = [self._embed_text_for(c) for c in self.companies]
+
         logger.info(f"Encoding {len(texts_to_embed)} company profiles...")
-        # Convert to numpy array for fast cosine similarity calculations
         self.company_embeddings = self.model.encode(texts_to_embed, convert_to_tensor=True)
-        
+
         # Save to cache
         try:
             logger.info(f"Saving embeddings cache to {cache_path}...")
             cache_data = {
-                "csv_hash": current_hash,
-                "embeddings": self.company_embeddings
+                "content_hash": current_hash,
+                "csv_hash": current_hash,          # tương thích ngược với cache cũ
+                "source_id": self.source.source_id,
+                "embeddings": self.company_embeddings,
             }
             with open(cache_path, 'wb') as f:
                 pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
             logger.info("✅ Embeddings cache saved successfully.")
         except Exception as e:
             logger.warning(f"⚠️ Failed to save cache: {e}")
-            
+
         logger.info("Company index built successfully.")
-        
+
+    # ------------------------------------------------------------------
+    # SCORING HELPERS
+    # ------------------------------------------------------------------
     def _extract_location_mentions(self, text):
         """Extracts city names or provinces from text to identify geographic intent."""
         text_lower = text.lower()
-        
+
         # Location mapping for major regions in Vietnam
         location_patterns = {
             "TP. Hồ Chí Minh": [r"\bhcm\b", r"\bhồ chí minh\b", r"\bsài gòn\b", r"\bsg\b", r"\bquận 1\b", r"\bq1\b", r"\bthành phố hồ chí minh\b"],
@@ -130,7 +140,7 @@ class B2BMatchingEngine:
             "Đà Nẵng": [r"\bđà nẵng\b", r"\bđn\b"],
             "Hải Phòng": [r"\bhải phòng\b", r"\bhp\b"],
         }
-        
+
         found_locations = []
         for location_name, patterns in location_patterns.items():
             for pattern in patterns:
@@ -144,41 +154,69 @@ class B2BMatchingEngine:
         query_words = set(re.findall(r'\w+', query.lower()))
         if not query_words:
             return 0.0
-            
+
         # Combine company keywords
         company_keywords_str = f"{company['name']} {company['main_industry']} {company['sub_industry']} {company['industry_group']} {company['classification']}"
         company_words = set(re.findall(r'\w+', company_keywords_str.lower()))
-        
+
         # Calculate intersection
         overlap = query_words.intersection(company_words)
-        
+
         # Normalize by length of query words to see how much of the query is satisfied
         if not overlap:
             return 0.0
         return len(overlap) / len(query_words)
 
+    @staticmethod
+    def _normalize_province(text):
+        """
+        Chuẩn hoá tên tỉnh/thành để so khớp được mọi định dạng lưu trữ:
+
+            "TP. Hồ Chí Minh"                        → "hochiminh"
+            "ho-chi-minh"           (province_slug)  → "hochiminh"
+            "Quận 7, Tp Hồ Chí Minh" (location)      → "quan7hochiminh"
+
+        Bỏ dấu tiếng Việt, hạ chữ thường, bỏ mọi ký tự không phải chữ/số,
+        rồi bỏ tiền tố hành chính ("tp", "thanhpho", "tinh").
+        """
+        from datasource.config import normalize_key
+
+        key = normalize_key(text)
+        for prefix in ("thanhpho", "tinh", "tp"):
+            if key.startswith(prefix):
+                key = key[len(prefix):]
+                break
+        return key
+
     def _check_location_match(self, company, query_locations):
         """Check if a company's city matches any of the query locations."""
         if not query_locations:
             return True  # No location constraint → all match
-        company_city = company["city"].lower()
+        company_city = self._normalize_province(company["city"])
+        if not company_city:
+            return False
         for loc in query_locations:
-            if loc.lower() in company_city or company_city in loc.lower():
+            loc_key = self._normalize_province(loc)
+            if loc_key and (loc_key in company_city or company_city in loc_key):
                 return True
         return False
 
+    # ------------------------------------------------------------------
+    # MATCHING
+    # ------------------------------------------------------------------
     def match(self, query, w_semantic=0.5, w_lexical=0.3, w_location=0.2, min_score=0.3):
         """
         Funnel Matching: Lexical → Location → SBERT
-        
+
         Tối ưu tốc độ bằng cách thu hẹp danh sách ứng viên qua 3 tầng:
           Tầng 1 (Lexical):  Lọc theo từ khóa ngành nghề      → ~100-300 DN
-          Tầng 2 (Location): Thu hẹp theo khu vực địa lý       → ~20-50 DN  
+          Tầng 2 (Location): Thu hẹp theo khu vực địa lý       → ~20-50 DN
           Tầng 3 (SBERT):    Chấm điểm ngữ nghĩa chính xác   → Top N
         """
+        from sentence_transformers import util
         import time
         t_start = time.time()
-        
+
         if not self.companies:
             self.load_data()
         if self.company_embeddings is None:
@@ -236,7 +274,7 @@ class B2BMatchingEngine:
         # TẦNG 2: LOCATION FILTER (Thu hẹp theo khu vực địa lý)
         # ================================================================
         query_locations = self._extract_location_mentions(query)
-        
+
         if query_locations:
             location_matched = []
             location_unmatched = []
@@ -245,7 +283,7 @@ class B2BMatchingEngine:
                     location_matched.append((idx, comp, lex, 1.0))
                 else:
                     location_unmatched.append((idx, comp, lex, 0.0))
-            
+
             # Ưu tiên DN đúng khu vực, giữ DN khác khu vực làm dự phòng
             candidates_scored = location_matched + location_unmatched
             t_location = time.time()
@@ -304,6 +342,8 @@ class B2BMatchingEngine:
         Fallback: Chạy SBERT trên toàn bộ danh sách DN (logic gốc).
         Chỉ được gọi khi Tầng 1 (Lexical) không tìm được ứng viên nào.
         """
+        from sentence_transformers import util
+
         self.load_model()
         query_embedding = self.model.encode(query, convert_to_tensor=True)
         cos_scores = util.cos_sim(query_embedding, self.company_embeddings)[0].cpu().numpy()
@@ -336,4 +376,3 @@ class B2BMatchingEngine:
         filtered_results.sort(key=lambda x: x["total_score"], reverse=True)
 
         return filtered_results
-

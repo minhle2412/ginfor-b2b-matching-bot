@@ -15,6 +15,7 @@ Cách chạy:
 
 import asyncio
 import os
+import sys
 import json
 import logging
 import argparse
@@ -99,9 +100,12 @@ try:
 except ValueError:
     OUTREACH_REVIEW_CHANNEL_ID = DISCORD_CHANNEL_ID
 
-# Đường dẫn tới dataset doanh nghiệp
+# Nguồn dữ liệu doanh nghiệp supplier (Supabase / CSV — cấu hình trong .env)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(BASE_DIR, "Business_dataset.csv")
+CSV_PATH = os.path.join(BASE_DIR, "Business_dataset.csv")   # chỉ dùng khi SUPPLIER_SOURCE=csv
+
+# Kênh outreach cho nhánh này: kết quả matching bài Facebook → comment vào bài viết
+OUTREACH_CHANNEL_FACEBOOK = "facebook_comment"
 
 # ===================== FILE PATHS =====================
 POSTS_DB_FILE = os.path.join(BASE_DIR, "fb_matching_posts.json")
@@ -170,6 +174,7 @@ PARTNER_QUERIES = [
 embedding_model = None
 query_embeddings = None
 matching_engine = None  # B2B Matching Engine instance
+supplier_source = None  # Nguồn dữ liệu doanh nghiệp (Supabase / CSV)
 outreach_engine = OutreachEngine()  # Ginfor Outreach Engine instance
 
 
@@ -224,18 +229,90 @@ NEGATIVE_KEYWORDS = [
 # ===================== B2B MATCHING ENGINE =====================
 def load_matching_engine():
     """Tải B2B Matching Engine (chỉ chạy 1 lần khi khởi động)"""
-    global matching_engine
+    global matching_engine, supplier_source
     from matching_engine import B2BMatchingEngine
-    
+    from datasource import get_supplier_source
+
+    supplier_source = get_supplier_source()
+
     logger.info("🏢 Đang tải B2B Matching Engine...")
-    logger.info(f"   📄 Dataset: {CSV_PATH}")
+    logger.info(f"   🗄️  Nguồn dữ liệu: {supplier_source.describe()}")
     logger.info(f"   ⚖️  Weights: semantic={MATCH_W_SEMANTIC}, lexical={MATCH_W_LEXICAL}, location={MATCH_W_LOCATION}")
-    
-    matching_engine = B2BMatchingEngine(csv_path=CSV_PATH)
+
+    matching_engine = B2BMatchingEngine(source=supplier_source)
     matching_engine.load_data()
     matching_engine.build_index()
-    
+
     logger.info(f"✅ B2B Matching Engine sẵn sàng! {len(matching_engine.companies)} doanh nghiệp đã được index.")
+
+
+# ===================== MATCH QUEUE (lưu kết quả matching) =====================
+# Kết quả matching của cả 2 nhánh được ghi vào chung bảng `buyer_supplier_matches`
+# trong b2b_harvester.db, phân biệt bằng outreach_channel:
+#   - nhánh này (Facebook group)     → 'facebook_comment'
+#   - nhánh B2B e-commerce           → 'email'  (xem ecommerce_matching.py)
+_match_db = None
+
+
+def get_match_db():
+    """Lazy-init DatabaseManager của B2B Harvester để ghi hàng đợi outreach."""
+    global _match_db
+    if _match_db is None:
+        harvester_dir = os.path.join(BASE_DIR, "b2b_harvester")
+        if harvester_dir not in sys.path:
+            sys.path.insert(0, harvester_dir)
+        from database import DatabaseManager
+        _match_db = DatabaseManager()
+    return _match_db
+
+
+def save_fb_matches(post: dict, matches: list) -> int:
+    """
+    Ghi kết quả matching của một bài viết Facebook vào hàng đợi outreach.
+    Lỗi ghi DB không được làm gián đoạn pipeline quét.
+    """
+    try:
+        db = get_match_db()
+    except Exception as e:
+        logger.warning(f"⚠️ Không mở được match queue DB: {e}")
+        return 0
+
+    post_id = post.get("post_id", "")
+    saved = 0
+    for rank, result in enumerate(matches, 1):
+        company = result["company"]
+        breakdown = result["score_breakdown"]
+        row = {
+            "buyer_id": f"fb:{post_id}",
+            "buyer_source": f"facebook_group:{post.get('group_id', '')}",
+            "source_type": "facebook_group",
+            "outreach_channel": OUTREACH_CHANNEL_FACEBOOK,
+            "buyer_title": post.get("text", "")[:200],
+            "buyer_query": post.get("text", ""),
+            "buyer_url": post.get("url", ""),
+            "buyer_email": "",
+            "buyer_phone": "",
+            "supplier_id": company.get("supplier_id", ""),
+            "supplier_name": company.get("name", ""),
+            "supplier_email": company.get("email", ""),
+            "supplier_phone": company.get("phone", ""),
+            "supplier_city": company.get("city", ""),
+            "supplier_industry": company.get("main_industry", ""),
+            "rank_position": rank,
+            "score_total": result["total_score"],
+            "score_semantic": round(breakdown["semantic"], 4),
+            "score_lexical": round(breakdown["lexical"], 4),
+            "score_location": round(breakdown["location"], 4),
+        }
+        try:
+            if db.save_match(row):
+                saved += 1
+        except Exception as e:
+            logger.warning(f"⚠️ Không ghi được match {post_id} × {row['supplier_name']}: {e}")
+
+    if saved:
+        logger.info(f"   💾 Đã lưu {saved} cặp match vào hàng đợi comment Facebook")
+    return saved
 
 
 # ===================== VECTOR EMBEDDING MODULE =====================
@@ -787,7 +864,10 @@ async def scrape_and_match_all_groups(bot) -> int:
                     if matches:
                         logger.info(f"   🏢 Tìm thấy {len(matches)} DN phù hợp. Top: {matches[0]['company']['name']} ({int(matches[0]['total_score']*100)}%)")
                         total_companies_sent += len(matches)
-                        
+
+                        # Lưu vào hàng đợi outreach (kênh: comment Facebook)
+                        await asyncio.to_thread(save_fb_matches, post, matches)
+
                         # Gửi kết quả matching về Discord
                         await send_matching_results_to_discord(bot, post, buyer_score, matches)
 
@@ -866,7 +946,7 @@ async def on_ready():
     logger.info(f"📌 Discord Channel: {DISCORD_CHANNEL_ID}")
     logger.info(f"👥 Facebook Groups: {len(FB_GROUP_IDS)} groups")
     logger.info(f"📊 Buyer threshold: {SIMILARITY_THRESHOLD}")
-    logger.info(f"🏢 Business dataset: {CSV_PATH}")
+    logger.info(f"🏢 Nguồn dữ liệu DN: {os.getenv('SUPPLIER_SOURCE', 'auto')}")
     logger.info(f"{'='*60}\n")
 
     # Tải model embedding + matching engine
@@ -994,6 +1074,7 @@ async def match_status(ctx):
 
     model_status = "✅ Vietnamese SBERT" if embedding_model is not None else "⚠️ Keyword Matching"
     engine_status = f"✅ {len(matching_engine.companies)} DN" if matching_engine else "❌ Chưa sẵn sàng"
+    source_status = supplier_source.describe() if supplier_source else "❌ Chưa tải"
 
     embed = discord.Embed(
         title="🤖 Trạng Thái B2B Matching Bot",
@@ -1002,6 +1083,7 @@ async def match_status(ctx):
     )
     embed.add_field(name="🧠 SBERT Model", value=model_status, inline=True)
     embed.add_field(name="🏢 Matching Engine", value=engine_status, inline=True)
+    embed.add_field(name="🗄️ Nguồn dữ liệu", value=source_status, inline=True)
     embed.add_field(name="👥 Số groups", value=str(len(FB_GROUP_IDS)), inline=True)
     embed.add_field(name="📋 Posts đã quét", value=str(total_seen), inline=True)
     embed.add_field(name="📊 Buyer threshold", value=f"`{SIMILARITY_THRESHOLD}`", inline=True)
@@ -1040,6 +1122,30 @@ async def match_top_cmd(ctx, value: int = None):
     old = MATCH_TOP_N
     MATCH_TOP_N = value
     await ctx.send(f"✅ Top N: `{old}` → `{value}`")
+
+
+@bot.command(name='match_reload', help="Tải lại danh sách doanh nghiệp từ Supabase")
+async def match_reload_cmd(ctx):
+    """Tải lại dữ liệu supplier từ Supabase (không cần restart bot)."""
+    if matching_engine is None:
+        await ctx.send("❌ Matching engine chưa sẵn sàng.")
+        return
+
+    old_count = len(matching_engine.companies)
+    msg = await ctx.send(f"🔄 Đang tải lại dữ liệu từ **{supplier_source.describe()}**...")
+
+    try:
+        await asyncio.to_thread(matching_engine.reload_data, True)
+        new_count = len(matching_engine.companies)
+        delta = new_count - old_count
+        sign = f"+{delta}" if delta > 0 else str(delta)
+        await msg.edit(content=(
+            f"✅ Đã tải lại từ **{supplier_source.describe()}**\n"
+            f"   `{old_count}` → `{new_count}` doanh nghiệp ({sign})"
+        ))
+    except Exception as e:
+        logger.error(f"❌ Lỗi reload dữ liệu: {e}")
+        await msg.edit(content=f"❌ Lỗi tải lại dữ liệu: `{e}`")
 
 
 @bot.command(name='outreach_status', help="Xem thống kê của hệ thống outreach")
@@ -1081,6 +1187,7 @@ async def match_help_cmd(ctx):
         "🔵 **`!match_test <nhu cầu>`** — Test matching + preview outreach\n"
         "   *VD: `!match_test Cần tìm xưởng may ở HCM, LH: 0912345678`*\n\n"
         "🟡 **`!match_status`** — Xem trạng thái hệ thống matching\n\n"
+        "🔄 **`!match_reload`** — Tải lại danh sách DN từ Supabase\n\n"
         "📧 **`!outreach_status`** — Xem thống kê Ginfor Outreach\n\n"
         "🟠 **`!match_threshold <0.0-1.0>`** — Điều chỉnh ngưỡng buyer\n\n"
         "🟣 **`!match_top <1-20>`** — Số DN gợi ý mỗi bài\n\n"
@@ -1115,8 +1222,18 @@ if __name__ == "__main__":
     if not FB_COOKIE_C_USER or not FB_COOKIE_XS:
         logger.warning("⚠️ Chưa cấu hình Facebook Cookies.")
 
-    if not os.path.exists(CSV_PATH):
-        logger.error(f"❌ Không tìm thấy Business_dataset.csv tại: {CSV_PATH}")
-        exit(1)
+    # Kiểm tra nguồn dữ liệu supplier trước khi khởi động bot
+    from datasource.config import source_kind, supabase_url, supabase_key, supplier_table
+
+    if source_kind() == "supabase":
+        if not supabase_url() or not supabase_key():
+            logger.error("❌ SUPPLIER_SOURCE=supabase nhưng thiếu SUPABASE_URL / SUPABASE_KEY trong .env")
+            exit(1)
+        logger.info(f"🗄️  Nguồn dữ liệu supplier: Supabase — bảng '{supplier_table()}'")
+    else:
+        if not os.path.exists(CSV_PATH):
+            logger.error(f"❌ Không tìm thấy Business_dataset.csv tại: {CSV_PATH}")
+            exit(1)
+        logger.info(f"📄 Nguồn dữ liệu supplier: CSV — {CSV_PATH}")
 
     bot.run(DISCORD_TOKEN)

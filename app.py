@@ -9,20 +9,20 @@ from typing import List, Dict, Any
 # Ensure current directory is in path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from matching_engine import B2BMatchingEngine
+from datasource import get_supplier_source
 
 app = FastAPI(title="B2B Matching Engine API", description="API for matching buyers with B2B suppliers")
 
-# Path to the data
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(BASE_DIR, "Business_dataset.csv")
+
+# Nguồn dữ liệu supplier: Supabase (mặc định) hoặc CSV — cấu hình trong .env
+supplier_source = get_supplier_source()
 
 # Initialize matching engine
-engine = B2BMatchingEngine(csv_path=CSV_PATH)
+engine = B2BMatchingEngine(source=supplier_source)
 try:
     engine.load_data()
-    # Build index asynchronously or synchronously on startup
-    # Since example_data.csv is tiny (4 rows), building index is instantaneous.
-    # For large datasets (80k rows), this would be pre-built and loaded, but this works perfectly for prototype validation.
+    # Embeddings được cache trên đĩa, chỉ build lại khi dữ liệu nguồn thay đổi.
     engine.build_index()
 except Exception as e:
     print(f"Error initializing B2B Matching Engine: {e}")
@@ -43,6 +43,31 @@ class MatchResponseItem(BaseModel):
 def get_companies():
     """Lists all loaded companies in the database (for spot checks)."""
     return engine.companies
+
+
+@app.get("/api/source")
+def get_source_info():
+    """Thông tin nguồn dữ liệu supplier đang dùng (Supabase hay CSV)."""
+    info = {
+        "source_id": supplier_source.source_id,
+        "description": supplier_source.describe(),
+        "companies_loaded": len(engine.companies),
+        "index_built": engine.company_embeddings is not None,
+    }
+    if supplier_source.source_id == "supabase":
+        info["table"] = getattr(supplier_source, "table", None)
+        info["column_map"] = {k: v for k, v in getattr(supplier_source, "column_map", {}).items() if v}
+    return info
+
+
+@app.post("/api/reload")
+def reload_suppliers():
+    """Tải lại danh sách doanh nghiệp từ Supabase và build lại index nếu dữ liệu đổi."""
+    try:
+        engine.reload_data(rebuild_index=True)
+        return {"status": "ok", "companies_loaded": len(engine.companies)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/match", response_model=List[MatchResponseItem])
 def match_buyer_needs(request: MatchRequest):

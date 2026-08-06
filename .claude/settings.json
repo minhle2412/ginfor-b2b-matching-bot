@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/lenhatminh/Downloads/B2B Matching funtion\\\\ /**)",
+      "Bash(git add *)"
+    ],
+    "additionalDirectories": [
+      "/Users/lenhatminh/Downloads/B2B Matching funtion "
+    ]
+  }
+}
